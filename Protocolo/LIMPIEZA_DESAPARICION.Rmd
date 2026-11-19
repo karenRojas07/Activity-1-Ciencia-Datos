@@ -1,0 +1,1290 @@
+---
+title: "Limpieza y exploración de datos de desaparición"
+author: "Karen Rojas, Edward, Sandra y Juana"
+date: "2026-11-18"
+output:
+  html_document:
+    toc: true
+    toc_depth: 3
+    df_print: paged
+---
+
+# 1. Objetivo
+
+Este documento realiza la lectura, exploración, validación y limpieza inicial del archivo `verdata-desaparicion-R1.csv`.
+
+El proceso conserva el archivo original y trabaja sobre una copia. Se revisan valores faltantes, registros duplicados, tipos de datos, variables constantes, campos binarios, categorías y consistencia de las variables de tiempo.
+
+**Importante:** el archivo contiene variables llamadas `in_1` a `in_34`, pero no se proporcionó un diccionario que explique su significado. Por esa razón se conservan sus nombres y valores, sin asignarles una interpretación.
+
+# 2. Configuración
+
+```{r configuracion, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  warning = FALSE,
+  message = FALSE,
+  comment = "#>",
+  fig.align = "center",
+  fig.width = 9,
+  fig.height = 5
+)
+
+options(scipen = 999)
+```
+
+# 3. Lectura de los datos
+
+Guarda este archivo RMD y el CSV en la misma carpeta. El archivo está separado por punto y coma (`;`).
+
+```{r lectura}
+
+# Definir la ruta del archivo CSV
+archivo_csv <- "verdata-desaparicion-R1.csv"
+
+# Si no encuentra el archivo en la carpeta del RMD,
+# intenta utilizar la ruta completa del computador.
+if (!file.exists(archivo_csv)) {
+
+  ruta_alternativa <- "C:/Users/ASUS/Documents/Especializacion IA/Ciencia de datos/Desaparicion/Activity-1-Ciencia-Datos/Datos/verdata-desaparicion-R1.csv"
+
+  if (file.exists(ruta_alternativa)) {
+    archivo_csv <- ruta_alternativa
+  }
+
+}
+
+# Verificar que el archivo exista
+if (!file.exists(archivo_csv)) {
+  stop(paste0(
+    "No se encontro el archivo: ", archivo_csv,
+    ". Verifica la ubicación del CSV."
+  ))
+}
+
+# Leer los datos originales
+datos_originales <- read.csv(
+  file = archivo_csv,
+  sep = ";",
+  header = TRUE,
+  stringsAsFactors = FALSE,
+  na.strings = c("", "NA"),
+  check.names = FALSE,
+  strip.white = TRUE,
+  fileEncoding = "UTF-8"
+)
+
+# Mostrar dimensiones
+cat("Filas:", nrow(datos_originales), "\n")
+cat("Columnas:", ncol(datos_originales), "\n")
+
+cat("Archivo leído correctamente.\n")
+
+```
+
+## 3.1. Primeras filas
+
+```{r primeras-filas}
+
+columnas_muestra <- seq_len(min(12, ncol(datos_originales)))
+
+knitr::kable(
+  head(datos_originales[, columnas_muestra, drop = FALSE], 6),
+  caption = "Primeros seis registros (primeras 12 columnas)"
+)
+
+```
+
+## 3.2. Últimas filas
+
+```{r ultimas-filas}
+
+knitr::kable(
+  tail(datos_originales[, columnas_muestra, drop = FALSE], 6),
+  caption = "Últimos seis registros (primeras 12 columnas)"
+)
+
+```
+
+## 3.3. Dimensiones de los datos
+
+```{r dimensiones}
+
+dim(datos_originales)
+
+```
+
+## 3.4. Nombres de las columnas
+
+```{r nombres-columnas}
+
+tabla_columnas <- data.frame(
+  Numero = seq_along(names(datos_originales)),
+  Variable = names(datos_originales)
+)
+
+knitr::kable(
+  tabla_columnas,
+  caption = "Listado de variables del conjunto de datos"
+)
+
+```
+
+## 3.5. Estructura de los datos
+
+```{r estructura}
+
+str(datos_originales)
+
+```
+
+# 4. Exploración inicial
+
+## 4.1. Resumen general de las variables
+
+Se presenta el tipo de dato, la cantidad de valores únicos y los registros faltantes de cada variable.
+
+```{r resumen-variables}
+
+resumen_variables <- data.frame(
+
+  Variable = names(datos_originales),
+
+  Tipo = vapply(
+    datos_originales,
+    function(x) paste(class(x), collapse = ", "),
+    character(1)
+  ),
+
+  Valores_unicos = vapply(
+    datos_originales,
+    function(x) as.numeric(length(unique(x[!is.na(x)]))),
+    numeric(1)
+  ),
+
+  Datos_faltantes = vapply(
+    datos_originales,
+    function(x) as.numeric(sum(is.na(x))),
+    numeric(1)
+  ),
+
+  row.names = NULL
+)
+
+knitr::kable(
+  resumen_variables,
+  caption = "Resumen general de las variables"
+)
+
+```
+
+## 4.2. Identificación de variables categóricas
+
+Se identifican las variables que contienen información categórica para conocer sus posibles valores.
+
+```{r variables-categoricas}
+
+variables_categoricas <- intersect(
+  c(
+    "edad_categoria",
+    "edad_jep",
+    "etnia",
+    "p_str",
+    "sexo"
+  ),
+  names(datos_originales)
+)
+
+knitr::kable(
+  data.frame(Variable = variables_categoricas),
+  caption = "Variables categóricas identificadas"
+)
+
+```
+
+## 4.3. Exploración de variables binarias
+
+Se revisan las variables `in_1` hasta `in_34`, identificando la frecuencia de ceros, unos y otros valores.
+
+No se asigna significado a estas variables porque no se cuenta con su diccionario de datos.
+
+```{r variables-binarias}
+
+columnas_in <- grep(
+  "^in_[0-9]+$",
+  names(datos_originales),
+  value = TRUE
+)
+
+if (length(columnas_in) > 0) {
+
+  tabla_inicial_in <- data.frame(
+
+    Variable = columnas_in,
+
+    Ceros = vapply(
+      columnas_in,
+      function(v) as.numeric(sum(datos_originales[[v]] == 0, na.rm = TRUE)),
+      numeric(1)
+    ),
+
+    Unos = vapply(
+      columnas_in,
+      function(v) as.numeric(sum(datos_originales[[v]] == 1, na.rm = TRUE)),
+      numeric(1)
+    ),
+
+    Otros_valores = vapply(
+      columnas_in,
+      function(v) {
+        as.numeric(sum(
+          !is.na(datos_originales[[v]]) &
+            !(datos_originales[[v]] %in% c(0, 1))
+        ))
+      },
+      numeric(1)
+    ),
+
+    row.names = NULL
+  )
+
+  knitr::kable(
+    tabla_inicial_in,
+    caption = "Frecuencia de valores en las variables binarias"
+  )
+
+}
+
+```
+
+## 4.4. Variables relacionadas con imputación
+
+Se identifican las variables cuyo nombre termina en `_imputed`.
+
+Estas variables se conservan porque contienen información relacionada con los registros marcados como imputados.
+
+```{r variables-imputadas}
+
+columnas_imputed <- grep(
+  "_imputed$",
+  names(datos_originales),
+  value = TRUE
+)
+
+if (length(columnas_imputed) > 0) {
+
+  tabla_imputacion <- data.frame(
+
+    Variable = columnas_imputed,
+
+    Registros_TRUE = vapply(
+      columnas_imputed,
+      function(v) {
+        sum(
+          toupper(as.character(datos_originales[[v]])) == "TRUE",
+          na.rm = TRUE
+        )
+      },
+      numeric(1)
+    ),
+
+    Registros_FALSE = vapply(
+      columnas_imputed,
+      function(v) {
+        sum(
+          toupper(as.character(datos_originales[[v]])) == "FALSE",
+          na.rm = TRUE
+        )
+      },
+      numeric(1)
+    ),
+
+    row.names = NULL
+  )
+
+  tabla_imputacion$Porcentaje_TRUE <- round(
+    100 * tabla_imputacion$Registros_TRUE / nrow(datos_originales),
+    2
+  )
+
+  knitr::kable(
+    tabla_imputacion,
+    caption = "Resumen de indicadores de imputación"
+  )
+
+}
+
+```
+
+# 5. Calidad de los datos
+
+## 5.1. Identificación de valores faltantes
+
+Se calcula el total de valores faltantes en el conjunto de datos y su distribución por variable.
+
+```{r faltantes}
+
+# Total de valores faltantes
+total_faltantes <- sum(is.na(datos_originales))
+
+# Valores faltantes por columna
+faltantes_por_columna <- colSums(is.na(datos_originales))
+
+# Crear tabla
+tabla_faltantes <- data.frame(
+
+  Variable = names(faltantes_por_columna),
+
+  Datos_faltantes = as.integer(faltantes_por_columna),
+
+  row.names = NULL
+)
+
+# Calcular porcentaje
+tabla_faltantes$Porcentaje <- round(
+  100 * tabla_faltantes$Datos_faltantes / nrow(datos_originales),
+  2
+)
+
+# Ordenar de mayor a menor
+tabla_faltantes <- tabla_faltantes[
+  order(-tabla_faltantes$Datos_faltantes),
+]
+
+cat("Total de valores faltantes:", total_faltantes, "\n")
+
+knitr::kable(
+  tabla_faltantes,
+  caption = "Valores faltantes por variable"
+)
+
+```
+
+**Criterio aplicado:** no se eliminan registros automáticamente por presentar valores faltantes. Si existen, se reportan para definir su tratamiento de acuerdo con el significado de cada variable.
+
+## 5.2. Identificación de registros duplicados
+
+Se revisan los registros completamente duplicados y la posible repetición del identificador `match_group_id`.
+
+```{r duplicados}
+
+# Identificar registros completamente duplicados
+duplicados_exactos <- sum(duplicated(datos_originales))
+
+# Identificar identificadores repetidos
+if ("match_group_id" %in% names(datos_originales)) {
+
+  duplicados_identificador <- sum(
+    duplicated(datos_originales$match_group_id)
+  )
+
+} else {
+
+  duplicados_identificador <- NA_integer_
+
+}
+
+# Crear tabla
+tabla_duplicados <- data.frame(
+
+  Tipo_revision = c(
+    "Filas completamente duplicadas",
+    "match_group_id repetidos"
+  ),
+
+  Cantidad = c(
+    duplicados_exactos,
+    duplicados_identificador
+  )
+
+)
+
+knitr::kable(
+  tabla_duplicados,
+  caption = "Revisión de registros duplicados"
+)
+
+```
+
+## 5.3. Identificación de variables constantes
+
+Una variable constante presenta un único valor en todos sus registros no faltantes.
+
+Se identifican estas columnas, pero no se eliminan automáticamente.
+
+```{r constantes}
+
+es_constante <- vapply(
+  datos_originales,
+  function(x) {
+    length(unique(x[!is.na(x)])) <= 1
+  },
+  logical(1)
+)
+
+columnas_constantes <- names(es_constante)[es_constante]
+
+if (length(columnas_constantes) > 0) {
+
+  tabla_constantes <- data.frame(
+
+    Variable = columnas_constantes,
+
+    Valor_observado = vapply(
+      columnas_constantes,
+      function(v) {
+
+        valores <- unique(
+          datos_originales[[v]][!is.na(datos_originales[[v]])]
+        )
+
+        if (length(valores) == 0) {
+          "Sin datos"
+        } else {
+          as.character(valores[1])
+        }
+
+      },
+      character(1)
+    ),
+
+    row.names = NULL
+  )
+
+  knitr::kable(
+    tabla_constantes,
+    caption = "Variables constantes identificadas"
+  )
+
+} else {
+
+  cat("No se identificaron variables constantes.")
+
+}
+
+```
+
+## 5.4. Validación de variables binarias
+
+Se verifica que las variables `in_1` hasta `in_34` contengan únicamente valores 0 y 1.
+
+```{r validacion-binarias}
+
+if (length(columnas_in) > 0) {
+
+  valores_no_binarios <- lapply(
+    columnas_in,
+    function(v) {
+
+      valores <- unique(
+        datos_originales[[v]][!is.na(datos_originales[[v]])]
+      )
+
+      setdiff(as.character(valores), c("0", "1"))
+
+    }
+  )
+
+  names(valores_no_binarios) <- columnas_in
+
+  tabla_validacion_binaria <- data.frame(
+
+    Variable = columnas_in,
+
+    Valores_no_binarios = vapply(
+      valores_no_binarios,
+      function(x) {
+
+        if (length(x) == 0) {
+          "Ninguno"
+        } else {
+          paste(x, collapse = ", ")
+        }
+
+      },
+      character(1)
+    ),
+
+    row.names = NULL
+  )
+
+  knitr::kable(
+    tabla_validacion_binaria,
+    caption = "Validación de valores binarios"
+  )
+
+}
+
+```
+
+## 5.5. Validación de año y mes del hecho
+
+Se comparan las variables `yy_hecho` y `yymm_hecho`.
+
+También se verifica que el mes se encuentre entre 1 y 12.
+
+```{r validacion-tiempo}
+
+if (all(c("yy_hecho", "yymm_hecho") %in% names(datos_originales))) {
+
+  yymm_num <- suppressWarnings(
+    as.integer(as.character(datos_originales$yymm_hecho))
+  )
+
+  yymm_texto <- rep(NA_character_, length(yymm_num))
+
+  indices_validos <- !is.na(yymm_num)
+
+  yymm_texto[indices_validos] <- sprintf(
+    "%06d",
+    yymm_num[indices_validos]
+  )
+
+  anio_desde_yymm <- suppressWarnings(
+    as.integer(substr(yymm_texto, 1, 4))
+  )
+
+  mes_desde_yymm <- suppressWarnings(
+    as.integer(substr(yymm_texto, 5, 6))
+  )
+
+  # Revisar diferencias entre años
+  anios_inconsistentes <- sum(
+    !is.na(datos_originales$yy_hecho) &
+      !is.na(anio_desde_yymm) &
+      datos_originales$yy_hecho != anio_desde_yymm
+  )
+
+  # Revisar meses inválidos
+  meses_invalidos <- sum(
+    !is.na(mes_desde_yymm) &
+      !(mes_desde_yymm %in% 1:12)
+  )
+
+  # Revisar formato de año y mes
+  formato_invalido <- sum(
+    !is.na(yymm_num) &
+      nchar(yymm_texto) != 6
+  )
+
+  tabla_validacion_tiempo <- data.frame(
+
+    Validacion = c(
+      "Año yy_hecho diferente del año de yymm_hecho",
+      "Mes fuera del rango 1 a 12",
+      "Formato de yymm_hecho diferente de seis dígitos"
+    ),
+
+    Registros = c(
+      anios_inconsistentes,
+      meses_invalidos,
+      formato_invalido
+    )
+
+  )
+
+  knitr::kable(
+    tabla_validacion_tiempo,
+    caption = "Validación de las variables de tiempo"
+  )
+
+}
+
+```
+
+## 5.6. Revisión de categorías de edad
+
+Se revisan las etiquetas particulares encontradas en la variable `edad_categoria`.
+
+Las categorías `5-sep` y `oct-14` se mantienen sin modificaciones porque se necesita confirmar su significado antes de realizar cualquier sustitución.
+
+```{r etiquetas-edad}
+
+if ("edad_categoria" %in% names(datos_originales)) {
+
+  etiquetas_revisar <- c(
+    "5-sep",
+    "oct-14",
+    "5-SEP",
+    "OCT-14"
+  )
+
+  valores_edad <- trimws(
+    as.character(datos_originales$edad_categoria)
+  )
+
+  filas_edad_revisar <- valores_edad %in% etiquetas_revisar
+
+  tabla_etiquetas_edad <- as.data.frame(
+    sort(
+      table(valores_edad[filas_edad_revisar]),
+      decreasing = TRUE
+    )
+  )
+
+  if (nrow(tabla_etiquetas_edad) > 0) {
+
+    names(tabla_etiquetas_edad) <- c(
+      "Etiqueta_observada",
+      "Frecuencia"
+    )
+
+    knitr::kable(
+      tabla_etiquetas_edad,
+      caption = "Categorías de edad pendientes de verificación"
+    )
+
+  } else {
+
+    cat("No se encontraron las etiquetas señaladas.")
+
+  }
+
+}
+
+```
+
+# 6. Limpieza de datos
+
+Se crea una copia del conjunto de datos original para realizar las transformaciones.
+
+Se eliminan únicamente los registros completamente duplicados, si existen.
+
+No se eliminan columnas constantes ni se imputan valores automáticamente.
+
+## 6.1. Creación de la copia de trabajo
+
+```{r crear-datos-limpios}
+
+# Registrar dimensiones originales
+filas_originales <- nrow(datos_originales)
+columnas_originales <- ncol(datos_originales)
+
+# Crear copia sin registros completamente duplicados
+datos_limpios <- datos_originales[
+  !duplicated(datos_originales),
+  ,
+  drop = FALSE
+]
+
+# Conservar las categorías originales de edad
+if ("edad_categoria" %in% names(datos_limpios)) {
+
+  datos_limpios$edad_categoria_original <- as.character(
+    datos_limpios$edad_categoria
+  )
+
+}
+
+cat("Filas originales:", filas_originales, "\n")
+
+cat(
+  "Filas después de eliminar duplicados:",
+  nrow(datos_limpios),
+  "\n"
+)
+
+cat(
+  "Registros retirados:",
+  filas_originales - nrow(datos_limpios),
+  "\n"
+)
+
+```
+
+## 6.2. Normalización de variables categóricas
+
+Se realiza una normalización de espacios y letras mayúsculas en las variables categóricas.
+
+```{r normalizacion-textos}
+
+variables_texto <- intersect(
+  c(
+    "edad_categoria",
+    "edad_jep",
+    "etnia",
+    "p_str",
+    "sexo"
+  ),
+  names(datos_limpios)
+)
+
+for (variable in variables_texto) {
+
+  datos_limpios[[variable]] <- toupper(
+    trimws(as.character(datos_limpios[[variable]]))
+  )
+
+}
+
+cat("Variables categóricas normalizadas:\n")
+
+print(variables_texto)
+
+```
+
+## 6.3. Conversión de códigos e identificadores
+
+Los códigos de departamento y municipio se convierten a texto porque representan identificadores y no cantidades numéricas.
+
+```{r conversion-codigos}
+
+variables_codigo <- intersect(
+  c(
+    "replica",
+    "match_group_id",
+    "dept_code_hecho",
+    "muni_code_hecho"
+  ),
+  names(datos_limpios)
+)
+
+for (variable in variables_codigo) {
+
+  datos_limpios[[variable]] <- as.character(
+    datos_limpios[[variable]]
+  )
+
+}
+
+cat("Variables convertidas a texto:\n")
+
+print(variables_codigo)
+
+```
+
+## 6.4. Creación de variable de fecha
+
+Se crea una variable llamada `fecha_mes_hecho` utilizando la información de `yymm_hecho`.
+
+El día 01 se utiliza únicamente como referencia técnica, porque el archivo contiene año y mes, pero no proporciona el día exacto del hecho.
+
+```{r creacion-fecha}
+
+if ("yymm_hecho" %in% names(datos_limpios)) {
+
+  yymm_num <- suppressWarnings(
+    as.integer(as.character(datos_limpios$yymm_hecho))
+  )
+
+  yymm_texto <- rep(NA_character_, length(yymm_num))
+
+  indices_validos <- !is.na(yymm_num)
+
+  yymm_texto[indices_validos] <- sprintf(
+    "%06d",
+    yymm_num[indices_validos]
+  )
+
+  anio_limpio <- suppressWarnings(
+    as.integer(substr(yymm_texto, 1, 4))
+  )
+
+  mes_limpio <- suppressWarnings(
+    as.integer(substr(yymm_texto, 5, 6))
+  )
+
+  mes_valido <- !is.na(anio_limpio) &
+    !is.na(mes_limpio) &
+    mes_limpio %in% 1:12 &
+    nchar(yymm_texto) == 6
+
+  fecha_mes_hecho <- as.Date(
+    rep(NA_character_, length(yymm_num))
+  )
+
+  fecha_mes_hecho[mes_valido] <- as.Date(
+    paste0(
+      anio_limpio[mes_valido],
+      "-",
+      sprintf("%02d", mes_limpio[mes_valido]),
+      "-01"
+    )
+  )
+
+  datos_limpios$fecha_mes_hecho <- fecha_mes_hecho
+
+}
+
+```
+
+## 6.5. Verificación después de la limpieza
+
+Se comparan las dimensiones originales y las dimensiones obtenidas después del proceso de limpieza.
+
+```{r verificacion-limpieza}
+
+resumen_final <- data.frame(
+
+  Indicador = c(
+    "Filas originales",
+    "Filas después de limpieza",
+    "Columnas originales",
+    "Columnas después de limpieza",
+    "Valores faltantes en datos limpios",
+    "Filas duplicadas restantes"
+  ),
+
+  Resultado = c(
+    filas_originales,
+    nrow(datos_limpios),
+    columnas_originales,
+    ncol(datos_limpios),
+    sum(is.na(datos_limpios)),
+    sum(duplicated(datos_limpios))
+  )
+
+)
+
+knitr::kable(
+  resumen_final,
+  caption = "Resumen del proceso de limpieza"
+)
+
+```
+
+## 6.6. Visualización de los datos limpios
+
+Se presentan algunos registros y variables relevantes después de aplicar las transformaciones.
+
+```{r muestra-limpia}
+
+columnas_vista <- intersect(
+  c(
+    "match_group_id",
+    "sexo",
+    "edad_categoria",
+    "edad_categoria_original",
+    "edad_jep",
+    "etnia",
+    "p_str",
+    "yy_hecho",
+    "yymm_hecho",
+    "fecha_mes_hecho"
+  ),
+  names(datos_limpios)
+)
+
+knitr::kable(
+  head(datos_limpios[, columnas_vista, drop = FALSE], 10),
+  caption = "Muestra de registros después de la limpieza"
+)
+
+```
+
+# 7. Análisis descriptivo de variables
+
+Se realizan análisis de frecuencia para las principales variables categóricas del conjunto de datos.
+
+## 7.1. Función para tablas de frecuencia
+
+```{r funcion-frecuencias}
+
+tabla_frecuencia <- function(datos, variable) {
+
+  frecuencias <- sort(
+    table(datos[[variable]], useNA = "ifany"),
+    decreasing = TRUE
+  )
+
+  resultado <- data.frame(
+
+    Categoria = names(frecuencias),
+
+    Frecuencia = as.integer(frecuencias),
+
+    row.names = NULL
+
+  )
+
+  resultado$Porcentaje <- round(
+    100 * resultado$Frecuencia / sum(resultado$Frecuencia),
+    2
+  )
+
+  return(resultado)
+
+}
+
+```
+
+## 7.2. Distribución por sexo
+
+```{r frecuencia-sexo}
+
+if ("sexo" %in% names(datos_limpios)) {
+
+  knitr::kable(
+    tabla_frecuencia(datos_limpios, "sexo"),
+    caption = "Distribución de registros por sexo"
+  )
+
+}
+
+```
+
+## 7.3. Distribución por pertenencia étnica
+
+```{r frecuencia-etnia}
+
+if ("etnia" %in% names(datos_limpios)) {
+
+  knitr::kable(
+    tabla_frecuencia(datos_limpios, "etnia"),
+    caption = "Distribución por pertenencia étnica"
+  )
+
+}
+
+```
+
+## 7.4. Distribución por categoría de edad
+
+```{r frecuencia-edad}
+
+if ("edad_categoria" %in% names(datos_limpios)) {
+
+  knitr::kable(
+    tabla_frecuencia(datos_limpios, "edad_categoria"),
+    caption = "Distribución por categoría de edad"
+  )
+
+}
+
+```
+
+## 7.5. Distribución por grupo de edad JEP
+
+```{r frecuencia-jep}
+
+if ("edad_jep" %in% names(datos_limpios)) {
+
+  knitr::kable(
+    tabla_frecuencia(datos_limpios, "edad_jep"),
+    caption = "Distribución por grupo de edad JEP"
+  )
+
+}
+
+```
+
+## 7.6. Distribución por variable p_str
+
+```{r frecuencia-pstr}
+
+if ("p_str" %in% names(datos_limpios)) {
+
+  knitr::kable(
+    tabla_frecuencia(datos_limpios, "p_str"),
+    caption = "Distribución de la variable p_str"
+  )
+
+}
+
+```
+
+## 7.7. Distribución por año del hecho
+
+```{r frecuencia-anio}
+
+if ("yy_hecho" %in% names(datos_limpios)) {
+
+  frecuencia_anual <- as.data.frame(
+    table(datos_limpios$yy_hecho)
+  )
+
+  names(frecuencia_anual) <- c(
+    "Año",
+    "Frecuencia"
+  )
+
+  frecuencia_anual$Año <- as.integer(
+    as.character(frecuencia_anual$Año)
+  )
+
+  frecuencia_anual <- frecuencia_anual[
+    order(frecuencia_anual$Año),
+  ]
+
+  knitr::kable(
+    frecuencia_anual,
+    caption = "Cantidad de registros por año del hecho"
+  )
+
+}
+
+```
+
+# 8. Visualización gráfica
+
+Se generan gráficos para facilitar la interpretación de las principales variables del conjunto de datos.
+
+## 8.1. Distribución por sexo
+
+```{r grafico-sexo}
+
+if ("sexo" %in% names(datos_limpios)) {
+
+  barplot(
+    sort(
+      table(datos_limpios$sexo),
+      decreasing = TRUE
+    ),
+
+    main = "Distribución por sexo",
+
+    xlab = "Sexo",
+
+    ylab = "Frecuencia",
+
+    col = "skyblue",
+
+    las = 1
+  )
+
+}
+
+```
+
+## 8.2. Distribución por categoría de edad
+
+```{r grafico-edad}
+
+if ("edad_categoria" %in% names(datos_limpios)) {
+
+  frecuencias_edad <- sort(
+    table(datos_limpios$edad_categoria),
+    decreasing = TRUE
+  )
+
+  par(mar = c(8, 4, 3, 1))
+
+  barplot(
+    frecuencias_edad,
+
+    main = "Distribución por categoría de edad",
+
+    xlab = "Categoría de edad",
+
+    ylab = "Frecuencia",
+
+    col = "lightgreen",
+
+    las = 2,
+
+    cex.names = 0.8
+  )
+
+  par(mar = c(5, 4, 4, 2) + 0.1)
+
+}
+
+```
+
+## 8.3. Distribución por año del hecho
+
+```{r grafico-anio}
+
+if ("yy_hecho" %in% names(datos_limpios)) {
+
+  frecuencia_anual <- as.data.frame(
+    table(datos_limpios$yy_hecho)
+  )
+
+  names(frecuencia_anual) <- c(
+    "Año",
+    "Frecuencia"
+  )
+
+  frecuencia_anual$Año <- as.integer(
+    as.character(frecuencia_anual$Año)
+  )
+
+  frecuencia_anual <- frecuencia_anual[
+    order(frecuencia_anual$Año),
+  ]
+
+  plot(
+
+    frecuencia_anual$Año,
+
+    frecuencia_anual$Frecuencia,
+
+    type = "b",
+
+    pch = 19,
+
+    main = "Registros por año del hecho",
+
+    xlab = "Año",
+
+    ylab = "Frecuencia"
+
+  )
+
+}
+
+```
+
+## 8.4. Distribución por pertenencia étnica
+
+```{r grafico-etnia}
+
+if ("etnia" %in% names(datos_limpios)) {
+
+  barplot(
+    sort(
+      table(datos_limpios$etnia),
+      decreasing = TRUE
+    ),
+
+    main = "Distribución por pertenencia étnica",
+
+    xlab = "Pertenencia étnica",
+
+    ylab = "Frecuencia",
+
+    col = "lightblue",
+
+    las = 2
+  )
+
+}
+
+```
+
+# 9. Exportación de los datos limpios
+
+Se exporta el conjunto de datos después de aplicar las transformaciones.
+
+El archivo original permanece sin modificaciones.
+
+El nuevo archivo conserva las columnas originales y agrega:
+
+- `edad_categoria_original`: conserva la categoría de edad antes de normalizarla.
+- `fecha_mes_hecho`: representa el año y mes del hecho mediante una fecha técnica.
+
+```{r exportar}
+
+# Obtener la carpeta donde se encuentra el CSV original
+directorio_salida <- dirname(
+  normalizePath(
+    archivo_csv,
+    winslash = "/",
+    mustWork = TRUE
+  )
+)
+
+# Nombre del archivo de salida
+archivo_salida <- file.path(
+  directorio_salida,
+  "verdata-desaparicion-R1_limpio.csv"
+)
+
+# Exportar datos limpios
+write.csv2(
+
+  datos_limpios,
+
+  file = archivo_salida,
+
+  row.names = FALSE,
+
+  na = "",
+
+  fileEncoding = "UTF-8"
+
+)
+
+cat("Archivo generado correctamente:\n")
+
+cat(archivo_salida)
+
+```
+
+# 10. Hallazgos y decisiones pendientes
+
+A partir del proceso de exploración y limpieza se presentan los siguientes indicadores:
+
+```{r hallazgos, results='asis'}
+
+cat(
+  "**Total de registros originales:** ",
+  format(filas_originales, big.mark = "."),
+  "\n\n"
+)
+
+cat(
+  "**Total de columnas originales:** ",
+  columnas_originales,
+  "\n\n"
+)
+
+cat(
+  "**Valores faltantes:** ",
+  total_faltantes,
+  "\n\n"
+)
+
+cat(
+  "**Registros completamente duplicados:** ",
+  duplicados_exactos,
+  "\n\n"
+)
+
+cat(
+  "**Identificadores match_group_id repetidos:** ",
+  duplicados_identificador,
+  "\n\n"
+)
+
+cat(
+  "**Variables constantes identificadas:** ",
+  length(columnas_constantes),
+  "\n\n"
+)
+
+if (length(columnas_constantes) > 0) {
+
+  cat(
+    paste(columnas_constantes, collapse = ", "),
+    "\n\n"
+  )
+
+}
+
+cat(
+  "**Registros finales después de la limpieza:** ",
+  format(nrow(datos_limpios), big.mark = "."),
+  "\n\n"
+)
+
+cat(
+  "**Total de columnas después de la limpieza:** ",
+  ncol(datos_limpios),
+  "\n\n"
+)
+
+```
+
+## 10.1. Consideraciones finales
+
+1. Se conserva el archivo original y las transformaciones se realizan sobre una copia.
+
+2. Las variables `in_1` a `in_34` se mantienen sin interpretación semántica porque no se cuenta con su diccionario de datos.
+
+3. Los indicadores terminados en `_imputed` se conservan como información de trazabilidad.
+
+4. Las variables constantes se identifican, pero no se eliminan automáticamente.
+
+5. Los códigos de departamento y municipio se convierten a texto para tratarlos como identificadores.
+
+6. Se crea una variable de fecha mensual a partir de `yymm_hecho`, utilizando el día 01 como referencia técnica.
+
+7. Las categorías `5-sep` y `oct-14` requieren confirmación antes de realizar cualquier modificación.
+
+8. No se imputan valores ni se eliminan registros por datos faltantes automáticamente.
+
+9. El archivo limpio se exporta en formato CSV separado por punto y coma.
+
+**Resultado:** se obtiene un conjunto de datos limpio, documentado y disponible para posteriores procesos de análisis estadístico.
