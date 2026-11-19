@@ -1,6 +1,6 @@
 ---
 title: "Limpieza y exploración de datos de desaparición"
-author: "Karen Rojas, Edward, Sandra y Juana"
+author: "Karen Rojas, Sandra Pineda"
 date: "2026-11-18"
 output:
   html_document:
